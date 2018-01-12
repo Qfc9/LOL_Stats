@@ -6,6 +6,7 @@ AWS.config.update({
 var docClient = new AWS.DynamoDB.DocumentClient();
 var championStats;
 var userDataBase = "LOLStats_User";
+var matchDataBase = "LOLStats_NAMatches";
 var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-d72c91f7-7d37-4293-b599-f52131e65881"
   };
@@ -35,8 +36,11 @@ exports.handle = (event, context, callback) => {
 
 function fetchLOLMatches(event, callback, users)
 {
-    users.forEach(function(user)
-    {
+    var user = users[0];
+
+    console.log(user.username);
+    // users.forEach(function(user)
+    // {
       var options = {
           url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=3',
           method: 'GET',
@@ -45,10 +49,13 @@ function fetchLOLMatches(event, callback, users)
       // Start the request
       request(options, function (error, response, body) {
           if (!error && response.statusCode == 200) {
-              console.log("Getting Match Details");
+              console.log("Getting Match history");
               var parsedBody = JSON.parse(body);
               parsedBody.matches.forEach(function(match){
-                 fetchLOLMatch(event, callback, match);
+                matchExists(match.gameId, function(){
+                  logMatch(match.gameId);
+                  fetchLOLMatch(callback, match);
+                });
               });
               callback(null, "DONE");
           }
@@ -56,10 +63,47 @@ function fetchLOLMatches(event, callback, users)
             callback(error);
           }
       });
-    });
+    // });
 }
 
-function fetchLOLMatch(event, callback, match)
+function matchExists(id, cb) {
+  var params = {
+      TableName: matchDataBase,
+      Key:{
+          "matchID": id
+      }
+  };
+
+  docClient.get(params, function(err, data) {
+      if (err) {
+        console.log(err);
+      } else {
+        if(Object.keys(data).length === 0)
+        {
+          cb()
+        }
+      }
+  });
+}
+
+function logMatch(id) {
+  var params = {
+    TableName:matchDataBase,
+    Item:{
+        "matchID": id
+    }
+  };
+
+  docClient.put(params, function(err, data) {
+    if (err) {
+        console.error("Unable to add item. Error JSON:", JSON.stringify(err, null, 2));
+    } else {
+        //console.log("Added item:", JSON.stringify(data, null, 2));
+      }
+  });
+}
+
+function fetchLOLMatch(callback, match)
 {
   var options = {
       url: 'https://na1.api.riotgames.com/lol/match/v3/matches/' + match.gameId,
@@ -69,10 +113,9 @@ function fetchLOLMatch(event, callback, match)
   // Start the request
   request(options, function (error, response, body) {
       if (!error && response.statusCode == 200) {
-          console.log("Getting User Info");
+          console.log("Getting Match Details: ");
           var parsedBody = JSON.parse(body);
           parsedBody.participantIdentities.forEach(function(id){
-            console.log("a");
             setLOLUser(id);
           });
       }
@@ -100,23 +143,8 @@ function setLOLUser(id) {
   docClient.update(params, function (err, data) {
       if (err) {
           console.error("Unable to update item. Creating Item");
-          var params = {
-              TableName:table,
-              Item:{
-                  "username": id.player.summonerName.toLowerCase(),
-                  "updateTime": Date.now(),
-                  "userData": id.player
-              }
-          };
-          docClient.put(params, function(err, data) {
-              if (err) {
-                  console.error("Unable to add item.");
-              } else {
-                  console.log("Add succeeded:");
-              }
-          });
       } else {
-          console.log("UpdateItem succeeded:");
+          //console.log("UpdateItem succeeded:");
       }
   });
 }
