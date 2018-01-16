@@ -1,4 +1,5 @@
 var request = require('request');
+var sleep = require('system-sleep');
 var AWS = require('aws-sdk');
 AWS.config.update({
     region: "us-east-1"
@@ -7,8 +8,9 @@ var docClient = new AWS.DynamoDB.DocumentClient();
 var championStats;
 var userDataBase = "LOLStats_User";
 var matchDataBase = "LOLStats_NAMatches";
+var champDataBase = 'LOLStats_NAChampionStats';
 var apiTokenLOL = {
-    "X-Riot-Token": "RGAPI-d72c91f7-7d37-4293-b599-f52131e65881"
+    "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"
   };
 
 exports.handle = (event, context, callback) => {
@@ -36,13 +38,13 @@ exports.handle = (event, context, callback) => {
 
 function fetchLOLMatches(event, callback, users)
 {
-    var user = users[0];
-
-    console.log(user.username);
-    // users.forEach(function(user)
-    // {
+    // var user = users[0];
+    users.forEach(function(user)
+    {
+      console.log(user.username);
       var options = {
-          url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=3',
+          // url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=3',
+          url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=5',
           method: 'GET',
           headers: apiTokenLOL,
       };
@@ -51,26 +53,29 @@ function fetchLOLMatches(event, callback, users)
           if (!error && response.statusCode == 200) {
               console.log("Getting Match history");
               var parsedBody = JSON.parse(body);
+
               parsedBody.matches.forEach(function(match){
                 matchExists(match.gameId, function(){
-                  logMatch(match.gameId);
                   fetchLOLMatch(callback, match);
                 });
+                console.log('Exucute wait' + Date.now());
+                sleep(10000);
               });
+
               callback(null, "DONE");
           }
           else{
             callback(error);
           }
       });
-    // });
+    });
 }
 
 function matchExists(id, cb) {
   var params = {
       TableName: matchDataBase,
       Key:{
-          "matchID": id
+          "gameId": id
       }
   };
 
@@ -86,12 +91,11 @@ function matchExists(id, cb) {
   });
 }
 
-function logMatch(id) {
+function logMatch(match) {
+  match.analyzed = false;
   var params = {
     TableName:matchDataBase,
-    Item:{
-        "matchID": id
-    }
+    Item:  match
   };
 
   docClient.put(params, function(err, data) {
@@ -115,6 +119,8 @@ function fetchLOLMatch(callback, match)
       if (!error && response.statusCode == 200) {
           console.log("Getting Match Details: ");
           var parsedBody = JSON.parse(body);
+          //setChampionStats(parsedBody);
+          logMatch(parsedBody);
           parsedBody.participantIdentities.forEach(function(id){
             setLOLUser(id);
           });
@@ -125,17 +131,20 @@ function fetchLOLMatch(callback, match)
     });
 }
 
+function setChampionStats(data) {
 
-function setLOLUser(id) {
+  var verIndex = data.gameVersion.indexOf(".", 2)
+  data.gameVersion = data.gameVersion.substring(0, verIndex);
+
   var params = {
-  TableName: userDataBase,
+  TableName: champDataBase,
   Key:{
-      "username": id.player.summonerName.toLowerCase()
+      "patch": data.gameVersion,
+      "queueID": data.queueId
   },
-  UpdateExpression: "set updateTime = :time, userData = :data",
+  UpdateExpression: "set userData = :data",
   ExpressionAttributeValues:{
-      ":data":id.player,
-      ":time":Date.now()
+      ":data":data.player,
   },
       ReturnValues:"UPDATED_NEW"
   };
@@ -149,43 +158,79 @@ function setLOLUser(id) {
   });
 }
 
-function getLOLUser(event, callback, user)
-{
-      var options = {
-          url: 'https://na1.api.riotgames.com/lol/summoner/v3/summoners/by-name/' + user.username,
-          method: 'GET',
-          headers: apiTokenLOL,
-      };
-      // Start the request
-      request(options, function (error, response, body) {
-          if (!error && response.statusCode == 200) {
-              var parsedBody = JSON.parse(body);
+function setLOLUser(id) {
 
-              var params = {
-              TableName: userDataBase,
-              Key:{
-                  "username": user.username,
-              },
-              UpdateExpression: "set updateTime = :time, userData = :data",
-              ExpressionAttributeValues:{
-                  ":data":parsedBody,
-                  ":time":Date.now()
-              },
-                  ReturnValues:"UPDATED_NEW"
-              };
+  var params = {
+      TableName: userDataBase,
+      Key:{
+          "username": id.player.summonerName.toLowerCase()
+      }
+  };
 
-              docClient.update(params, function(err, data) {
-                  if (err) {
-                      console.error("Unable to update item. Error JSON:");
-                      callback(null, err);
-                  } else {
-                      console.log("UpdateItem succeeded:");
-                      callback(null, data);
-                  }
-              });
-          }
-          else{
-            callback(error);
-          }
-      });
+  docClient.get(params, function(err, data) {
+      if (err) {
+        console.log(err);
+        return 0;
+      } else {
+        //if((Object.keys(data).length === 0) || ((Date.now() - data.updateTime) > 10000))
+        if(Object.keys(data).length === 0)
+        {
+
+          var options = {
+              url: 'https://na1.api.riotgames.com/lol/league/v3/positions/by-summoner/' + id.player.summonerId,
+              method: 'GET',
+              headers: apiTokenLOL,
+          };
+
+          // Start the request
+          request(options, function (error, response, body) {
+              if (!error && response.statusCode == 200) {
+                  var rankedData = JSON.parse(body);
+
+                  var params = {
+                  TableName: userDataBase,
+                  Key:{
+                      "username": id.player.summonerName.toLowerCase()
+                  },
+                  UpdateExpression: "set updateTime = :time, rank = :rank, userData = :data",
+                  ExpressionAttributeValues:{
+                      ":data":id.player,
+                      ":rank": rankedData,
+                      ":time":Date.now()
+                  },
+                      ReturnValues:"UPDATED_NEW"
+                  };
+
+                  docClient.update(params, function (err, data) {
+                      // Adding if can't update
+                      if (err) {
+                          var params = {
+                              TableName:userDataBase,
+                              Item:{
+                                  "username": id.player.summonerName.toLowerCase(),
+                                  "rank":rankedData,
+                                  "userData":id.player,
+                                  "updateTime":Date.now()
+                              }
+                          };
+                          docClient.put(params, function(err, data) {
+                              if (err) {
+                                  console.error("Unable to add item. Error JSON:", JSON.stringify(err, null, 2));
+                              } else {
+                                  //console.log("Added item:", JSON.stringify(data, null, 2));
+                              }
+                          });
+                      } else {
+                          //console.log("UpdateItem succeeded:");
+                      }
+                  });
+
+              }
+              else{
+                //callback(error);
+              }
+          });
+        }
+      }
+  });
 }
