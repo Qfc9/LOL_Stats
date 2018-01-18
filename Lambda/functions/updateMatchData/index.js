@@ -25,11 +25,11 @@ var params = {
 docClient.scan(params, function onScan(err, data) {
       if (err) {
           console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
-          callback(err);
+          console.log(err);
       } else {
           console.log("Scan succeeded.");
 
-          fetchLOLMatches(event, callback, data.Items);
+          fetchLOLMatches(data.Items);
       }
   });
 
@@ -55,7 +55,7 @@ function fetchLOLMatches(users)
                 matchExists(match.gameId, function(){
                   sleep(10000);
                   console.log('Exucute wait' + Date.now());
-                  fetchLOLMatch(callback, match);
+                  fetchLOLMatch(match);
                 });
               });
 
@@ -83,7 +83,7 @@ function matchExists(id, cb) {
       } else {
         if(Object.keys(data).length === 0)
         {
-          cb()
+          cb();
         }
       }
   });
@@ -104,7 +104,7 @@ function logMatch(match) {
   });
 }
 
-function fetchLOLMatch(callback, match)
+function fetchLOLMatch(match)
 {
   var options = {
       url: 'https://na1.api.riotgames.com/lol/match/v3/matches/' + match.gameId,
@@ -123,7 +123,7 @@ function fetchLOLMatch(callback, match)
           });
       }
       else{
-        callback(error);
+        console.log(error);
       }
     });
 }
