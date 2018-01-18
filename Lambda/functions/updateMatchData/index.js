@@ -92,7 +92,6 @@ function matchExists(id, cb) {
 }
 
 function logMatch(match) {
-  match.analyzed = false;
   var params = {
     TableName:matchDataBase,
     Item:  match
