@@ -24,8 +24,7 @@ var params = {
 
 docClient.scan(params, function onScan(err, data) {
       if (err) {
-          console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
-          console.log(err);
+          console.error("Unable to scan the table. Error JSON: " + JSON.stringify(err, null, 2));
       } else {
           console.log("Scan succeeded.");
 
@@ -65,7 +64,7 @@ function fetchLOLMatches(users)
               console.log("Finished user " +counter+ "/" + users.length);
           }
           else{
-            console.log("ERROR fetchLOLMatches(): "JSON.stringify(error));
+            console.log("ERROR fetchLOLMatches(): " + JSON.stringify(error));
             return 0;
           }
       });
@@ -100,7 +99,7 @@ function logMatch(match) {
 
   docClient.put(params, function(err, data) {
     if (err) {
-        console.error("Unable to add item. Error JSON:", JSON.stringify(err, null, 2));
+        console.error("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
     } else {
         //console.log("Added item:", JSON.stringify(data, null, 2));
       }
@@ -126,7 +125,7 @@ function fetchLOLMatch(match)
           });
       }
       else{
-        console.log(JSON.stringify(error));
+        console.log("ERROR fetchLOLMatch" + JSON.stringify(error));
         return 0;
       }
     });
@@ -216,7 +215,7 @@ function setLOLUser(id) {
                           };
                           docClient.put(params, function(err, data) {
                               if (err) {
-                                  console.error("Unable to add item. Error JSON:", JSON.stringify(err, null, 2));
+                                  console.error("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
                               } else {
                                   //console.log("Added item:", JSON.stringify(data, null, 2));
                               }
