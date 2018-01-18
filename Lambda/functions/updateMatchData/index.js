@@ -31,8 +31,9 @@ docClient.scan(params, function onScan(err, data) {
 
           fetchLOLMatches(data.Items);
       }
-      console.log("Finished");
   });
+
+console.log("Finished");
 
 function fetchLOLMatches(users)
 {
@@ -64,7 +65,7 @@ function fetchLOLMatches(users)
               console.log("Finished user " +counter+ "/" + users.length);
           }
           else{
-            console.log(error);
+            console.log("ERROR fetchLOLMatches(): "JSON.stringify(error));
             return 0;
           }
       });
@@ -81,7 +82,7 @@ function matchExists(id, cb) {
 
   docClient.get(params, function(err, data) {
       if (err) {
-        console.log(err);
+        console.log("ERROR matchExists(): " + JSON.stringify(err));
       } else {
         if(Object.keys(data).length === 0)
         {
@@ -125,7 +126,7 @@ function fetchLOLMatch(match)
           });
       }
       else{
-        console.log(error);
+        console.log(JSON.stringify(error));
         return 0;
       }
     });
@@ -169,7 +170,7 @@ function setLOLUser(id) {
 
   docClient.get(params, function(err, data) {
       if (err) {
-        console.log(err);
+        console.log("ERROR setLOLUser(): " + JSON.stringify(err));
         return 0;
       } else {
         //if((Object.keys(data).length === 0) || ((Date.now() - data.updateTime) > 10000))
