@@ -31,6 +31,7 @@ docClient.scan(params, function onScan(err, data) {
 
           fetchLOLMatches(data.Items);
       }
+      console.log("Finished");
   });
 
 function fetchLOLMatches(users)
@@ -64,6 +65,7 @@ function fetchLOLMatches(users)
           }
           else{
             console.log(error);
+            return 0;
           }
       });
     });
@@ -124,6 +126,7 @@ function fetchLOLMatch(match)
       }
       else{
         console.log(error);
+        return 0;
       }
     });
 }
