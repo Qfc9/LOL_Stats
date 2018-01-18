@@ -13,38 +13,35 @@ var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"
   };
 
-exports.handle = (event, context, callback) => {
-
-  var params = {
-    TableName: userDataBase,
-    ProjectionExpression: "username, updateTime, userData",
-    FilterExpression: "updateTime < :time",
-    ExpressionAttributeValues: {
-         ":time": Date.now()
-    }
-  };
-
-  docClient.scan(params, function onScan(err, data) {
-        if (err) {
-            console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
-            callback(err);
-        } else {
-            console.log("Scan succeeded.");
-
-            fetchLOLMatches(event, callback, data.Items);
-        }
-    });
+var params = {
+  TableName: userDataBase,
+  ProjectionExpression: "username, updateTime, userData",
+  FilterExpression: "updateTime < :time",
+  ExpressionAttributeValues: {
+       ":time": Date.now()
+  }
 };
 
-function fetchLOLMatches(event, callback, users)
+docClient.scan(params, function onScan(err, data) {
+      if (err) {
+          console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
+          callback(err);
+      } else {
+          console.log("Scan succeeded.");
+
+          fetchLOLMatches(event, callback, data.Items);
+      }
+  });
+
+function fetchLOLMatches(users)
 {
     // var user = users[0];
+    var counter = 0;
     users.forEach(function(user)
     {
-      console.log(user.username);
       var options = {
           // url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=3',
-          url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=5',
+          url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=10',
           method: 'GET',
           headers: apiTokenLOL,
       };
@@ -56,16 +53,17 @@ function fetchLOLMatches(event, callback, users)
 
               parsedBody.matches.forEach(function(match){
                 matchExists(match.gameId, function(){
+                  sleep(10000);
+                  console.log('Exucute wait' + Date.now());
                   fetchLOLMatch(callback, match);
                 });
-                console.log('Exucute wait' + Date.now());
-                sleep(10000);
               });
 
-              callback(null, "DONE");
+              counter = counter + 1;
+              console.log("Finished user " +counter+ "/" + users.length);
           }
           else{
-            callback(error);
+            console.log(error);
           }
       });
     });
