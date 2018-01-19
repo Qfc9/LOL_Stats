@@ -106,17 +106,18 @@ function addMatch(pkMatches, curMatch)
   var game = {};
   game.patch = curMatch.gameVersion;
   game.queueId = curMatch.queueId;
-  game.duration = {};
-  game.duration.totalTime = curMatch.gameDuration;
-  game.duration.totalGames = 1;
-  game.bans = {};
-  game.lanes = {};
+  game.overall = {};
+  game.overall.duration = {};
+  game.overall.duration.totalTime = curMatch.gameDuration;
+  game.overall.duration.totalGames = 1;
+  game.overall.bans = {};
+  game.overall.lanes = {};
 
   curMatch.teams.forEach(function(team){
     team.bans.forEach(function(ban){
-      game.bans["c"+ban.championId] = {}
-      game.bans["c"+ban.championId].championId = ban.championId;
-      game.bans["c"+ban.championId].counter = 1;
+      game.overall.bans["c"+ban.championId] = {}
+      game.overall.bans["c"+ban.championId].championId = ban.championId;
+      game.overall.bans["c"+ban.championId].counter = 1;
     });
   });
 
@@ -131,7 +132,7 @@ function addMatch(pkMatches, curMatch)
         theLane = player.timeline.lane;
     }
 
-    game.lanes[theLane] = {};
+    game.overall.lanes[theLane] = {};
 
     var champInfo = {};
     champInfo.championId = player.championId;
@@ -146,7 +147,7 @@ function addMatch(pkMatches, curMatch)
       champInfo.wins = 0;
     }
 
-    game.lanes[theLane]["c"+champInfo.championId] = champInfo;
+    game.overall.lanes[theLane]["c"+champInfo.championId] = champInfo;
   });
 
   pkMatches.push(game);
@@ -155,22 +156,22 @@ function addMatch(pkMatches, curMatch)
 
 function updateMatch(pkMatch, curMatch)
 {
-  pkMatch.duration.totalTime += curMatch.gameDuration;
-  pkMatch.duration.totalGames += 1;
+  pkMatch.overall.duration.totalTime += curMatch.gameDuration;
+  pkMatch.overall.duration.totalGames += 1;
 
   curMatch.teams.forEach(function(team){
     team.bans.forEach(function(tBan){
 
-      if(pkMatch.bans["c"+tBan.championId])
+      if(pkMatch.overall.bans["c"+tBan.championId])
       {
-        pkMatch.bans["c"+tBan.championId].counter += 1;
+        pkMatch.overall.bans["c"+tBan.championId].counter += 1;
         banFound = true;
       }
       else
       {
-        pkMatch.bans["c"+tBan.championId] = {};
-        pkMatch.bans["c"+tBan.championId].championId = tBan.championId;
-        pkMatch.bans["c"+tBan.championId].counter = 1;
+        pkMatch.overall.bans["c"+tBan.championId] = {};
+        pkMatch.overall.bans["c"+tBan.championId].championId = tBan.championId;
+        pkMatch.overall.bans["c"+tBan.championId].counter = 1;
       }
     });
   });
@@ -187,14 +188,14 @@ function updateMatch(pkMatch, curMatch)
     }
 
     var champFound = false;
-    if(theLane in pkMatch.lanes && pkMatch.lanes[theLane]["c"+player.championId])
+    if(theLane in pkMatch.overall.lanes && pkMatch.overall.lanes[theLane]["c"+player.championId])
     {
           champFound = true;
-          pkMatch.lanes[theLane]["c"+player.championId].counter += 1;
+          pkMatch.overall.lanes[theLane]["c"+player.championId].counter += 1;
 
           if(player.stats.win)
           {
-            pkMatch.lanes[theLane]["c"+player.championId].wins += 1;
+            pkMatch.overall.lanes[theLane]["c"+player.championId].wins += 1;
           }
     }
     if(!champFound)
@@ -209,9 +210,9 @@ function updateMatch(pkMatch, curMatch)
           theLane = player.timeline.lane;
       }
 
-      if(!(theLane in pkMatch.lanes))
+      if(!(theLane in pkMatch.overall.lanes))
       {
-        pkMatch.lanes[theLane] = [];
+        pkMatch.overall.lanes[theLane] = [];
       }
 
       var champInfo = {};
@@ -227,23 +228,9 @@ function updateMatch(pkMatch, curMatch)
         champInfo.wins = 0;
       }
 
-      pkMatch.lanes[theLane]["c"+champInfo.championId] = champInfo;
+      pkMatch.overall.lanes[theLane]["c"+champInfo.championId] = champInfo;
     }
   });
-}
-
-
-function checkChampionBanned(championId, teams)
-{
-  teams.forEach(function(team){
-    team.bans.forEach(function(ban){
-      if(championId == ban.championId)
-      {
-        return true;
-      }
-    });
-  });
-  return false;
 }
 
 function addChampionStats(packagedMatches)
@@ -255,16 +242,12 @@ function addChampionStats(packagedMatches)
         "patch": match.patch,
         "queueId": match.queueId
     },
-    UpdateExpression: "set #duration = :duration, #bans = :bans, #lanes = :lanes",
+    UpdateExpression: "set #overall = :overall",
     ExpressionAttributeNames: {
-      "#duration": "duration",
-      "#bans": "bans",
-      "#lanes": "lanes"
+      "#overall": "overall"
     },
     ExpressionAttributeValues:{
-        ":duration": match.duration,
-        ":bans": match.bans,
-        ":lanes": match.lanes
+        ":overall": match.overall
     },
         ReturnValues:"UPDATED_NEW"
     };
@@ -278,9 +261,7 @@ function addChampionStats(packagedMatches)
               Item:{
                 "patch": match.patch,
                 "queueId": match.queueId,
-                "duration": match.duration,
-                "bans": match.bans,
-                "lanes": match.lanes
+                "overall": match.overall
               }
           };
           docClient.put(params, function(err, data) {

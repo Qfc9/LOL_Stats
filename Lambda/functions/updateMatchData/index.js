@@ -63,7 +63,7 @@ function fetchLOLMatches(users)
               parsedBody.matches.forEach(function(match){
                 console.log("Processing match " + matchCounter + "/" + parsedBody.matches.length);
                 matchCounter = matchCounter + 1;
-                sleep(1000);
+                sleep(1500);
                 matchExists(match.gameId, function(){
                   fetchLOLMatch(match);
                 });
@@ -77,7 +77,7 @@ function fetchLOLMatches(users)
             sleep(30000);
           }
       });
-      sleep(1000);
+      sleep(1500);
     });
 }
 
