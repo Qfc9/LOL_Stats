@@ -69,15 +69,12 @@ function fetchLOLMatches(users)
                 });
               });
 
-              var id = {};
-              id.player = user.userData
-              updateLOLUser(id, userUpdate);
               counter = counter + 1;
               console.log("\nFinished user " +counter+ "/" + users.length + "\n");
           }
-          else{
-            console.log("ERROR fetchLOLMatches(): " + response.statusCode);
-            sleep(1000);
+          else if(response.statusCode == 429){
+            console.log("HIT LIMIT, WAITING...");
+            sleep(30000);
           }
       });
       sleep(1000);
@@ -106,13 +103,13 @@ function matchExists(id, cb) {
 
 function logMatch(match) {
   var params = {
-    TableName:matchDataBase,
-    Item:  match
+    TableName: matchDataBase,
+    Item: match
   };
 
   docClient.put(params, function(err, data) {
     if (err) {
-        console.error("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
+        console.log("Unable to add item. Error JSON:" + JSON.stringify(err));
     } else {
         //console.log("Added item:", JSON.stringify(data, null, 2));
       }
@@ -124,21 +121,26 @@ function fetchLOLMatch(match)
   var options = {
       url: 'https://na1.api.riotgames.com/lol/match/v3/matches/' + match.gameId,
       method: 'GET',
-      headers: apiTokenLOL,
+      headers: apiTokenLOL
   };
   // Start the request
   request(options, function (error, response, body) {
       if (!error && response.statusCode == 200) {
           var parsedBody = JSON.parse(body);
-          //setChampionStats(parsedBody);
-          logMatch(parsedBody);
+
+          // Checking for Bot games
+          if(parsedBody.queueId < 800 || parsedBody.queueId > 899)
+          {
+              logMatch(parsedBody);
+          }
+
           parsedBody.participantIdentities.forEach(function(id){
             sleep(1000);
             setLOLUser(id);
           });
       }
       else{
-        console.log("ERROR fetchLOLMatch" + JSON.stringify(error));
+        console.log("ERROR fetchLOLMatch");
       }
     });
 }
@@ -163,7 +165,7 @@ function setChampionStats(data) {
 
   docClient.update(params, function (err, data) {
       if (err) {
-          console.error("Unable to update item. Creating Item");
+          console.log("Unable to update item. Creating Item");
       } else {
           //console.log("UpdateItem succeeded:");
       }
@@ -262,12 +264,12 @@ function addLOLUser(id, options)
                   "username": id.player.summonerName.toLowerCase(),
                   "rank":rankedData,
                   "userData":id.player,
-                  "updateTime":Date.now()
+                  "updateTime": 1000
               }
           };
           docClient.put(params, function(err, data) {
               if (err) {
-                  console.error("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
+                  console.log("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
               } else {
                   //console.log("Added item:", JSON.stringify(data, null, 2));
               }

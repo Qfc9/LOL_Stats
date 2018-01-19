@@ -11,183 +11,52 @@ var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"
   };
 
-exports.handle = (event, context, callback) => {
 
-  var params = {
-    TableName: matchDataBase,
-    ProjectionExpression: "gameId, gameDuration, gameVersion, participants, queueId, seasonId, teams",
-    FilterExpression: "analyzed.champStats <> :bool",
-    ExpressionAttributeValues: {
-        ":bool": true
-    }
-  };
 
-  docClient.scan(params, function onScan(err, data) {
-        if (err) {
-            console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
-            callback(err);
-        } else {
-            console.log("Scan succeeded.");
-            storeChampionStats(data.Items, callback);
-        }
-    });
+var params = {
+  TableName: matchDataBase,
+  ProjectionExpression: "gameId, gameDuration, gameVersion, participants, queueId, seasonId, teams",
+  FilterExpression: "analyzed.champStats <> :bool",
+  ExpressionAttributeValues: {
+      ":bool": true
+  }
 };
 
-function storeChampionStats(matches, callback) {
+docClient.scan(params, function onScan(err, data) {
+  if (err) {
+      console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
+      callback(err);
+  } else {
+      console.log("Scan succeeded.");
+      storeChampionStats(data.Items);
+  }
+});
 
-  var packagedMatches = [];
 
-  matches.forEach(function(match){
-    var patchFound = false;
+function storeChampionStats(matches) {
 
-    packagedMatches.forEach(function(matchPackage){
-      if (match.gameVersion == matchPackage.patch && match.queueId == matchPackage.queueId)
+  var pkMatches = [];
+
+  matches.forEach(function(curMatch){
+    var found = false;
+
+    // Fixing patch number
+    var firstDot = curMatch.gameVersion.indexOf(".") + 1;
+    var secondDot = curMatch.gameVersion.indexOf(".", firstDot);
+    curMatch.gameVersion = curMatch.gameVersion.substring(0, secondDot);
+
+    pkMatches.forEach(function(pkMatch){
+      if (curMatch.gameVersion == pkMatch.patch && curMatch.queueId == pkMatch.queueId)
       {
-        matchPackage.duration.totalTime += match.gameDuration;
-        matchPackage.duration.totalGames += 1;
-
-        match.teams.forEach(function(team){
-          team.bans.forEach(function(tBan){
-            var banFound = false;
-            matchPackage.bans.forEach(function(mBan){
-              if(mBan.championId == tBan.championId)
-              {
-                mBan.counter += 1;
-                banFound = true;
-                return;
-              }
-            });
-            if(!banFound)
-            {
-              var theBan = {};
-              theBan.championId = tBan.championId;
-              theBan.counter = 1;
-              matchPackage.bans.push(theBan);
-            }
-          });
-        });
-
-        match.participants.forEach(function(player){
-          var theLane = "";
-          if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
-          {
-            theLane = "SUPPORT";
-          }
-          else
-          {
-              theLane = player.timeline.lane;
-          }
-
-          var champFound = false;
-          if(theLane in matchPackage.lanes)
-          {
-            matchPackage.lanes[theLane].forEach(function(champ){
-              if(player.championId == champ.championId)
-              {
-                champFound = true;
-                champ.counter += 1;
-
-                if(player.stats.win)
-                {
-                  champ.wins += 1;
-                }
-              }
-            });
-          }
-          if(!champFound)
-          {
-            var theLane = "";
-            if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
-            {
-              theLane = "SUPPORT";
-            }
-            else
-            {
-                theLane = player.timeline.lane;
-            }
-
-            if(!(theLane in matchPackage.lanes))
-            {
-              matchPackage.lanes[theLane] = [];
-            }
-
-            var champInfo = {};
-            champInfo.championId = player.championId;
-            champInfo.counter = 1;
-
-            if(player.stats.win)
-            {
-              champInfo.wins = 1;
-            }
-            else
-            {
-              champInfo.wins = 0;
-            }
-
-            matchPackage.lanes[theLane].push(champInfo);
-          }
-        });
-
-        patchFound = true;
-        return;
+        updateMatch(pkMatch, curMatch);
+        found = true;
       }
     });
 
     // IF NOT FOUND
-    if(!patchFound)
+    if(!found)
     {
-      var game = {};
-      game.patch = match.gameVersion;
-      game.queueId = match.queueId;
-      game.duration = {};
-      game.duration.totalTime = match.gameDuration;
-      game.duration.totalGames = 1;
-      game.bans = [];
-      game.lanes = {};
-
-      match.teams.forEach(function(team){
-        team.bans.forEach(function(ban){
-          if(checkChampionBanned(ban.championId, match.teams))
-          {
-            var theBan = {};
-            theBan.championId = ban.championId;
-            theBan.counter = 1;
-            bans.push(theBan);
-          }
-        });
-      });
-
-      match.participants.forEach(function(player){
-        var theLane = "";
-        if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
-        {
-          theLane = "SUPPORT"
-        }
-        else
-        {
-            theLane = player.timeline.lane;
-        }
-
-        game.lanes[theLane] = [];
-
-        var champInfo = {};
-        champInfo.championId = player.championId;
-        champInfo.counter = 1;
-
-        if(player.stats.win)
-        {
-          champInfo.wins = 1;
-        }
-        else
-        {
-          champInfo.wins = 0;
-        }
-
-        game.lanes[theLane].push(champInfo);
-      });
-
-      packagedMatches.push(game);
-      //console.log("NO: " + match.gameVersion);
+      addMatch(pkMatch, curMatch);
     }
     else
     {
@@ -195,9 +64,153 @@ function storeChampionStats(matches, callback) {
     }
   });
 
-  addChampionStats(packagedMatches);
-  callback(null, packagedMatches[0]);
+  //addChampionStats(packagedMatches);
+  console.log("");
 
+}
+
+function asdf()
+{
+  var game = {};
+  game.patch = match.gameVersion;
+  game.queueId = match.queueId;
+  game.duration = {};
+  game.duration.totalTime = match.gameDuration;
+  game.duration.totalGames = 1;
+  game.bans = [];
+  game.lanes = {};
+
+  match.teams.forEach(function(team){
+    team.bans.forEach(function(ban){
+      if(checkChampionBanned(ban.championId, match.teams))
+      {
+        var theBan = {};
+        theBan.championId = ban.championId;
+        theBan.counter = 1;
+        bans.push(theBan);
+      }
+    });
+  });
+
+  match.participants.forEach(function(player){
+    var theLane = "";
+    if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
+    {
+      theLane = "SUPPORT"
+    }
+    else
+    {
+        theLane = player.timeline.lane;
+    }
+
+    game.lanes[theLane] = [];
+
+    var champInfo = {};
+    champInfo.championId = player.championId;
+    champInfo.counter = 1;
+
+    if(player.stats.win)
+    {
+      champInfo.wins = 1;
+    }
+    else
+    {
+      champInfo.wins = 0;
+    }
+
+    game.lanes[theLane].push(champInfo);
+  });
+
+  packagedMatches.push(game);
+  //console.log("NO: " + match.gameVersion);
+}
+
+function updateMatch(pkMatch, curMatch)
+{
+  matchPackage.duration.totalTime += match.gameDuration;
+  matchPackage.duration.totalGames += 1;
+
+  match.teams.forEach(function(team){
+    team.bans.forEach(function(tBan){
+      var banFound = false;
+      matchPackage.bans.forEach(function(mBan){
+        if(mBan.championId == tBan.championId)
+        {
+          mBan.counter += 1;
+          banFound = true;
+          return;
+        }
+      });
+      if(!banFound)
+      {
+        var theBan = {};
+        theBan.championId = tBan.championId;
+        theBan.counter = 1;
+        matchPackage.bans.push(theBan);
+      }
+    });
+  });
+
+  match.participants.forEach(function(player){
+    var theLane = "";
+    if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
+    {
+      theLane = "SUPPORT";
+    }
+    else
+    {
+        theLane = player.timeline.lane;
+    }
+
+    var champFound = false;
+    if(theLane in matchPackage.lanes)
+    {
+      matchPackage.lanes[theLane].forEach(function(champ){
+        if(player.championId == champ.championId)
+        {
+          champFound = true;
+          champ.counter += 1;
+
+          if(player.stats.win)
+          {
+            champ.wins += 1;
+          }
+        }
+      });
+    }
+    if(!champFound)
+    {
+      var theLane = "";
+      if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
+      {
+        theLane = "SUPPORT";
+      }
+      else
+      {
+          theLane = player.timeline.lane;
+      }
+
+      if(!(theLane in matchPackage.lanes))
+      {
+        matchPackage.lanes[theLane] = [];
+      }
+
+      var champInfo = {};
+      champInfo.championId = player.championId;
+      champInfo.counter = 1;
+
+      if(player.stats.win)
+      {
+        champInfo.wins = 1;
+      }
+      else
+      {
+        champInfo.wins = 0;
+      }
+
+      matchPackage.lanes[theLane].push(champInfo);
+    }
+  });
 }
 
 
