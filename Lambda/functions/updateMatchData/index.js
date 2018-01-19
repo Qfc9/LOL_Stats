@@ -13,26 +13,27 @@ var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"
   };
 
-var params = {
+var updateWaitTimer = 172800000;
+
+var initParams = {
   TableName: userDataBase,
   ProjectionExpression: "username, updateTime, userData",
   FilterExpression: "updateTime < :time",
   ExpressionAttributeValues: {
-       ":time": Date.now()
+       ":time": Date.now() - updateWaitTimer
   }
 };
 
-docClient.scan(params, function onScan(err, data) {
+docClient.scan(initParams, function onScan(err, data) {
       if (err) {
           console.error("Unable to scan the table. Error JSON: " + JSON.stringify(err, null, 2));
       } else {
           console.log("Scan succeeded.");
 
           fetchLOLMatches(data.Items);
+          console.log("FINISHED!!!!!!!!!!!");
       }
   });
-
-console.log("Finished");
 
 function fetchLOLMatches(users)
 {
@@ -40,6 +41,12 @@ function fetchLOLMatches(users)
     var counter = 0;
     users.forEach(function(user)
     {
+      var userUpdate = {
+          url: 'https://na1.api.riotgames.com/lol/league/v3/positions/by-summoner/' + user.userData.summonerId,
+          method: 'GET',
+          headers: apiTokenLOL
+      };
+
       var options = {
           // url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=3',
           url: 'https://na1.api.riotgames.com/lol/match/v3/matchlists/by-account/' + user.userData.accountId + '?endIndex=10',
@@ -49,25 +56,31 @@ function fetchLOLMatches(users)
       // Start the request
       request(options, function (error, response, body) {
           if (!error && response.statusCode == 200) {
-              console.log("Getting Match history");
+              console.log("Processing " + user.userData.summonerName);
               var parsedBody = JSON.parse(body);
 
+              var matchCounter = 1;
               parsedBody.matches.forEach(function(match){
+                console.log("Processing match " + matchCounter + "/" + parsedBody.matches.length);
+                matchCounter = matchCounter + 1;
+                sleep(1000);
                 matchExists(match.gameId, function(){
-                  sleep(10000);
-                  console.log('Exucute wait' + Date.now());
                   fetchLOLMatch(match);
                 });
               });
 
+              var id = {};
+              id.player = user.userData
+              updateLOLUser(id, userUpdate);
               counter = counter + 1;
-              console.log("Finished user " +counter+ "/" + users.length);
+              console.log("\nFinished user " +counter+ "/" + users.length + "\n");
           }
           else{
-            console.log("ERROR fetchLOLMatches(): " + JSON.stringify(error));
-            return 0;
+            console.log("ERROR fetchLOLMatches(): " + response.statusCode);
+            sleep(1000);
           }
       });
+      sleep(1000);
     });
 }
 
@@ -116,17 +129,16 @@ function fetchLOLMatch(match)
   // Start the request
   request(options, function (error, response, body) {
       if (!error && response.statusCode == 200) {
-          console.log("Getting Match Details: ");
           var parsedBody = JSON.parse(body);
           //setChampionStats(parsedBody);
           logMatch(parsedBody);
           parsedBody.participantIdentities.forEach(function(id){
+            sleep(1000);
             setLOLUser(id);
           });
       }
       else{
         console.log("ERROR fetchLOLMatch" + JSON.stringify(error));
-        return 0;
       }
     });
 }
@@ -158,6 +170,7 @@ function setChampionStats(data) {
   });
 }
 
+// ONLY ADDS NEW PLAYERS
 function setLOLUser(id) {
 
   var params = {
@@ -170,67 +183,98 @@ function setLOLUser(id) {
   docClient.get(params, function(err, data) {
       if (err) {
         console.log("ERROR setLOLUser(): " + JSON.stringify(err));
-        return 0;
-      } else {
-        //if((Object.keys(data).length === 0) || ((Date.now() - data.updateTime) > 10000))
+      }
+      else
+      {
+
+        var options = {
+            url: 'https://na1.api.riotgames.com/lol/league/v3/positions/by-summoner/' + id.player.summonerId,
+            method: 'GET',
+            headers: apiTokenLOL
+        };
+
         if(Object.keys(data).length === 0)
         {
+          addLOLUser(id, options);
+        }
+        else if(data.Items.updateTime < (Date.now() - updateWaitTimer))
+        {
+          updateLOLUser(id, options);
+        }
+      }
+  });
+}
 
-          var options = {
-              url: 'https://na1.api.riotgames.com/lol/league/v3/positions/by-summoner/' + id.player.summonerId,
-              method: 'GET',
-              headers: apiTokenLOL,
+function updateLOLUser(id, options)
+{
+  request(options, function (error, response, body) {
+      if (!error && response.statusCode == 200) {
+
+          var rankedData = JSON.parse(body);
+
+          var params = {
+          TableName: userDataBase,
+          Key:{
+              "username": id.player.summonerName.toLowerCase()
+          },
+          UpdateExpression: "set #updateTime = :time, #rank = :rank, #userData = :data",
+          ExpressionAttributeNames: {
+            "#updateTime": "updateTime",
+            "#rank": "rank",
+            "#userData": "userData"
+          },
+          ExpressionAttributeValues:{
+              ":data":id.player,
+              ":rank": rankedData,
+              ":time":Date.now()
+          },
+              ReturnValues:"UPDATED_NEW"
           };
 
-          // Start the request
-          request(options, function (error, response, body) {
-              if (!error && response.statusCode == 200) {
-                  var rankedData = JSON.parse(body);
-
-                  var params = {
-                  TableName: userDataBase,
-                  Key:{
-                      "username": id.player.summonerName.toLowerCase()
-                  },
-                  UpdateExpression: "set updateTime = :time, rank = :rank, userData = :data",
-                  ExpressionAttributeValues:{
-                      ":data":id.player,
-                      ":rank": rankedData,
-                      ":time":Date.now()
-                  },
-                      ReturnValues:"UPDATED_NEW"
-                  };
-
-                  docClient.update(params, function (err, data) {
-                      // Adding if can't update
-                      if (err) {
-                          var params = {
-                              TableName:userDataBase,
-                              Item:{
-                                  "username": id.player.summonerName.toLowerCase(),
-                                  "rank":rankedData,
-                                  "userData":id.player,
-                                  "updateTime":Date.now()
-                              }
-                          };
-                          docClient.put(params, function(err, data) {
-                              if (err) {
-                                  console.error("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
-                              } else {
-                                  //console.log("Added item:", JSON.stringify(data, null, 2));
-                              }
-                          });
-                      } else {
-                          //console.log("UpdateItem succeeded:");
-                      }
-                  });
-
-              }
-              else{
-                //callback(error);
+          docClient.update(params, function (err, data) {
+              // Adding if can't update
+              if (err) {
+                console.log("UPDATE ERR");
+                console.log(JSON.stringify(err));
+              } else {
+                  //console.log("UpdateItem succeeded:");
               }
           });
-        }
+
+      }
+      else{
+        console.log("LOL FetchERR");
+      }
+  });
+}
+
+function addLOLUser(id, options)
+{
+  // Start the request
+  request(options, function (error, response, body) {
+      if (!error && response.statusCode == 200) {
+
+          var rankedData = JSON.parse(body);
+
+          var params = {
+              TableName: userDataBase,
+              Item:{
+                  "username": id.player.summonerName.toLowerCase(),
+                  "rank":rankedData,
+                  "userData":id.player,
+                  "updateTime":Date.now()
+              }
+          };
+          docClient.put(params, function(err, data) {
+              if (err) {
+                  console.error("Unable to add item. Error JSON:" + JSON.stringify(err, null, 2));
+              } else {
+                  //console.log("Added item:", JSON.stringify(data, null, 2));
+              }
+          });
+      }
+      else{
+        //callback(error);
       }
   });
 }
