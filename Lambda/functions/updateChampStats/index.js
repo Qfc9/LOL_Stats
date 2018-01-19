@@ -7,35 +7,67 @@ AWS.config.update({
 var docClient = new AWS.DynamoDB.DocumentClient();
 var matchDataBase = "LOLStats_NAMatches";
 var champDataBase = 'LOLStats_NAChampionStats';
+var userDataBase = "LOLStats_User";
 var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"
   };
 
+var pkMatches = [];
+var newData = [];
 
-
-var params = {
-  TableName: matchDataBase,
-  ProjectionExpression: "gameId, gameDuration, gameVersion, participants, queueId, seasonId, teams",
-  FilterExpression: "analyzed.champStats <> :bool",
-  ExpressionAttributeValues: {
-      ":bool": true
-  }
+var paramsMatches = {
+  TableName: matchDataBase
 };
 
+// var params = {
+//   TableName: matchDataBase,
+//   ProjectionExpression: "gameId, gameDuration, gameVersion, participants, queueId, seasonId, teams",
+//   FilterExpression: "analyzed.champStats <> :bool",
+//   ExpressionAttributeValues: {
+//       ":bool": true
+//   }
+// };
+
+var params = {
+  TableName: champDataBase
+};
+
+// Getting New Data
+var scanExecute = function()
+{
+  docClient.scan(paramsMatches, function onScan(err, data) {
+    if (err) {
+        console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
+    } else {
+        newData = newData.concat(data.Items);
+        // if(data.LastEvaluatedKey)
+        // {
+        //   paramsMatches.ExclusiveStartKey = data.LastEvaluatedKey;
+        //   scanExecute();
+        // }
+        // else
+        // {
+          storeChampionStats(newData);
+        // }
+    }
+  });
+}
+
+// Getting Current Data
 docClient.scan(params, function onScan(err, data) {
   if (err) {
       console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
       callback(err);
   } else {
-      console.log("Scan succeeded.");
-      storeChampionStats(data.Items);
+      console.log("Pulled past stats");
+      pkMatches = data.Items;
+      scanExecute();
   }
 });
 
-
 function storeChampionStats(matches) {
 
-  var pkMatches = [];
+  console.log("Processing " + matches.length + " matches");
 
   matches.forEach(function(curMatch){
     var found = false;
@@ -56,7 +88,7 @@ function storeChampionStats(matches) {
     // IF NOT FOUND
     if(!found)
     {
-      addMatch(pkMatch, curMatch);
+      addMatch(pkMatches, curMatch);
     }
     else
     {
@@ -64,35 +96,31 @@ function storeChampionStats(matches) {
     }
   });
 
-  //addChampionStats(packagedMatches);
+  addChampionStats(pkMatches);
   console.log("");
 
 }
 
-function asdf()
+function addMatch(pkMatches, curMatch)
 {
   var game = {};
-  game.patch = match.gameVersion;
-  game.queueId = match.queueId;
+  game.patch = curMatch.gameVersion;
+  game.queueId = curMatch.queueId;
   game.duration = {};
-  game.duration.totalTime = match.gameDuration;
+  game.duration.totalTime = curMatch.gameDuration;
   game.duration.totalGames = 1;
-  game.bans = [];
+  game.bans = {};
   game.lanes = {};
 
-  match.teams.forEach(function(team){
+  curMatch.teams.forEach(function(team){
     team.bans.forEach(function(ban){
-      if(checkChampionBanned(ban.championId, match.teams))
-      {
-        var theBan = {};
-        theBan.championId = ban.championId;
-        theBan.counter = 1;
-        bans.push(theBan);
-      }
+      game.bans["c"+ban.championId] = {}
+      game.bans["c"+ban.championId].championId = ban.championId;
+      game.bans["c"+ban.championId].counter = 1;
     });
   });
 
-  match.participants.forEach(function(player){
+  curMatch.participants.forEach(function(player){
     var theLane = "";
     if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
     {
@@ -103,7 +131,7 @@ function asdf()
         theLane = player.timeline.lane;
     }
 
-    game.lanes[theLane] = [];
+    game.lanes[theLane] = {};
 
     var champInfo = {};
     champInfo.championId = player.championId;
@@ -118,40 +146,36 @@ function asdf()
       champInfo.wins = 0;
     }
 
-    game.lanes[theLane].push(champInfo);
+    game.lanes[theLane]["c"+champInfo.championId] = champInfo;
   });
 
-  packagedMatches.push(game);
+  pkMatches.push(game);
   //console.log("NO: " + match.gameVersion);
 }
 
 function updateMatch(pkMatch, curMatch)
 {
-  matchPackage.duration.totalTime += match.gameDuration;
-  matchPackage.duration.totalGames += 1;
+  pkMatch.duration.totalTime += curMatch.gameDuration;
+  pkMatch.duration.totalGames += 1;
 
-  match.teams.forEach(function(team){
+  curMatch.teams.forEach(function(team){
     team.bans.forEach(function(tBan){
-      var banFound = false;
-      matchPackage.bans.forEach(function(mBan){
-        if(mBan.championId == tBan.championId)
-        {
-          mBan.counter += 1;
-          banFound = true;
-          return;
-        }
-      });
-      if(!banFound)
+
+      if(pkMatch.bans["c"+tBan.championId])
       {
-        var theBan = {};
-        theBan.championId = tBan.championId;
-        theBan.counter = 1;
-        matchPackage.bans.push(theBan);
+        pkMatch.bans["c"+tBan.championId].counter += 1;
+        banFound = true;
+      }
+      else
+      {
+        pkMatch.bans["c"+tBan.championId] = {};
+        pkMatch.bans["c"+tBan.championId].championId = tBan.championId;
+        pkMatch.bans["c"+tBan.championId].counter = 1;
       }
     });
   });
 
-  match.participants.forEach(function(player){
+  curMatch.participants.forEach(function(player){
     var theLane = "";
     if(player.timeline.role == "DUO_SUPPORT" || player.timeline.role == "SUPPORT")
     {
@@ -163,20 +187,15 @@ function updateMatch(pkMatch, curMatch)
     }
 
     var champFound = false;
-    if(theLane in matchPackage.lanes)
+    if(theLane in pkMatch.lanes && pkMatch.lanes[theLane]["c"+player.championId])
     {
-      matchPackage.lanes[theLane].forEach(function(champ){
-        if(player.championId == champ.championId)
-        {
           champFound = true;
-          champ.counter += 1;
+          pkMatch.lanes[theLane]["c"+player.championId].counter += 1;
 
           if(player.stats.win)
           {
-            champ.wins += 1;
+            pkMatch.lanes[theLane]["c"+player.championId].wins += 1;
           }
-        }
-      });
     }
     if(!champFound)
     {
@@ -190,9 +209,9 @@ function updateMatch(pkMatch, curMatch)
           theLane = player.timeline.lane;
       }
 
-      if(!(theLane in matchPackage.lanes))
+      if(!(theLane in pkMatch.lanes))
       {
-        matchPackage.lanes[theLane] = [];
+        pkMatch.lanes[theLane] = [];
       }
 
       var champInfo = {};
@@ -208,7 +227,7 @@ function updateMatch(pkMatch, curMatch)
         champInfo.wins = 0;
       }
 
-      matchPackage.lanes[theLane].push(champInfo);
+      pkMatch.lanes[theLane]["c"+champInfo.championId] = champInfo;
     }
   });
 }
@@ -236,7 +255,12 @@ function addChampionStats(packagedMatches)
         "patch": match.patch,
         "queueId": match.queueId
     },
-    UpdateExpression: "set duration = :time, bans = :rank, lanes = :data",
+    UpdateExpression: "set #duration = :duration, #bans = :bans, #lanes = :lanes",
+    ExpressionAttributeNames: {
+      "#duration": "duration",
+      "#bans": "bans",
+      "#lanes": "lanes"
+    },
     ExpressionAttributeValues:{
         ":duration": match.duration,
         ":bans": match.bans,
@@ -248,6 +272,7 @@ function addChampionStats(packagedMatches)
     docClient.update(params, function (err, data) {
       // Adding if can't update
       if (err) {
+        console.log(JSON.stringify(err));
           var params = {
               TableName:champDataBase,
               Item:{
@@ -266,7 +291,7 @@ function addChampionStats(packagedMatches)
               }
           });
       } else {
-          //console.log("UpdateItem succeeded:");
+          console.log("UpdateItem succeeded:");
       }
     });
   });
