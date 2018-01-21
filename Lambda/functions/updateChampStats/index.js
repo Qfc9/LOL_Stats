@@ -15,18 +15,21 @@ var apiTokenLOL = {
 var pkMatches = [];
 var newData = [];
 
-var paramsMatches = {
-  TableName: matchDataBase
-};
-
-// var params = {
+// var paramsMatches = {
 //   TableName: matchDataBase,
-//   ProjectionExpression: "gameId, gameDuration, gameVersion, participants, queueId, seasonId, teams",
-//   FilterExpression: "analyzed.champStats <> :bool",
-//   ExpressionAttributeValues: {
-//       ":bool": true
+//   FilterExpression: "attribute_not_exists(#analyzed)",
+//   ExpressionAttributeNames: {
+//     "#analyzed": "analyzed.champStats"
 //   }
 // };
+//
+var paramsMatches = {
+  TableName: matchDataBase,
+  FilterExpression: "analyzed.champStats <> :bool",
+  ExpressionAttributeValues: {
+      ":bool": false
+  }
+};
 
 var params = {
   TableName: champDataBase
@@ -43,6 +46,7 @@ var scanExecute = function()
         // if(data.LastEvaluatedKey)
         // {
         //   paramsMatches.ExclusiveStartKey = data.LastEvaluatedKey;
+        //   sleep(50);
         //   scanExecute();
         // }
         // else
@@ -72,9 +76,9 @@ function storeChampionStats(matches) {
 
   matches.forEach(function(curMatch){
     var found = false;
+    var theKey = "overall";
 
-
-    if(curMatch.queueId >= 400 && curMatch.queueId <= 500 && curMatch.queueId != 450)
+    if((curMatch.queueId >= 400 && curMatch.queueId <= 500) && curMatch.queueId != 450)
     {
       theKey = currentMatchRank(curMatch);
     }
@@ -98,24 +102,15 @@ function storeChampionStats(matches) {
     // IF NOT FOUND
     if(!found)
     {
-      if(theKey != "overall")
-      {
-        addMatch(pkMatches, curMatch, theKey, true);
-      }
-      else
-      {
-        addMatch(pkMatches, curMatch, theKey, false);
-      }
+      addMatch(pkMatches, curMatch, theKey);
     }
-
   });
 
-  addChampionStats(pkMatches);
-  console.log("");
+  addChampionStats(pkMatches, matches);
 
 }
 
-function addMatch(pkMatches, curMatch, theKey, addToOverall)
+function addMatch(pkMatches, curMatch, theKey)
 {
   var game = {};
   game.patch = curMatch.gameVersion;
@@ -164,14 +159,17 @@ function addMatch(pkMatches, curMatch, theKey, addToOverall)
     game[theKey].lanes[theLane]["c"+champInfo.championId] = champInfo;
   });
 
-  if(addToOverall)
-  {
-    console.log("UPDATING");
-    updateMatch(game, curMatch, "overall");
-  }
-
   pkMatches.push(game);
-  //console.log("NO: " + match.gameVersion);
+
+  if(theKey != "overall")
+  {
+    pkMatches.forEach(function(pkMatch){
+      if(curMatch.gameVersion == pkMatch.patch && curMatch.queueId == pkMatch.queueId)
+      {
+        updateMatch(pkMatch, curMatch, "overall");
+      }
+    });
+  }
 }
 
 function updateMatch(pkMatch, curMatch, theKey)
@@ -242,7 +240,7 @@ function updateMatch(pkMatch, curMatch, theKey)
 
       if(!(theLane in pkMatch[theKey].lanes))
       {
-        pkMatch[theKey].lanes[theLane] = [];
+        pkMatch[theKey].lanes[theLane] = {};
       }
 
       var champInfo = {};
@@ -263,11 +261,13 @@ function updateMatch(pkMatch, curMatch, theKey)
   });
 }
 
-function addChampionStats(packagedMatches)
+function addChampionStats(packagedMatches, matches)
 {
+  var counter = 0;
   packagedMatches.forEach(function(match){
 
-    console.log(Object.keys(match));
+    console.log(match.overall.duration.totalGames);
+    sleep(100);
 
     var params = {
     TableName: champDataBase,
@@ -298,25 +298,64 @@ function addChampionStats(packagedMatches)
       // Adding if can't update
       if (err) {
         console.log(JSON.stringify(err));
-          var params = {
-              TableName:champDataBase,
-              Item:{
-                "patch": match.patch,
-                "queueId": match.queueId,
-                "overall": match.overall
-              }
-          };
-          docClient.put(params, function(err, data) {
-              if (err) {
-                  console.error("Unable to add item. Error JSON:", JSON.stringify(err, null, 2));
-              } else {
-                  //console.log("Added item:", JSON.stringify(data, null, 2));
-              }
-          });
+          // var params = {
+          //     TableName:champDataBase,
+          //     Item:{
+          //       "patch": match.patch,
+          //       "queueId": match.queueId,
+          //       "overall": match.overall
+          //     }
+          // };
+          // docClient.put(params, function(err, data) {
+          //     if (err) {
+          //         console.error("Unable to add item. Error JSON:", JSON.stringify(err, null, 2));
+          //     }
+          //     else
+          //     {
+          //         //console.log("Added item:", JSON.stringify(data, null, 2));
+          //         updateMatchChampStatsLog(matches);
+          //     }
+          // });
       } else {
-          console.log("UpdateItem succeeded:");
+          console.log("Setting " + counter + "/" + packagedMatches.length);
+          updateMatchChampStatsLog(matches);
       }
     });
+    counter += 1;
+  });
+
+}
+
+function updateMatchChampStatsLog(matches)
+{
+  matches.forEach(function(curMatch){
+    sleep(100);
+    if(curMatch.gameId)
+    {
+      var params = {
+      TableName: matchDataBase,
+      Key:{
+          "gameId": curMatch.gameId
+      },
+      UpdateExpression: "set #analyzed = :matchStats",
+      ExpressionAttributeNames: {
+        "#analyzed": "analyzed"
+      },
+      ExpressionAttributeValues:{
+          ":matchStats": {champStats: true}
+      },
+          ReturnValues:"UPDATED_NEW"
+      };
+
+      docClient.update(params, function (err, data) {
+        // Adding if can't update
+        if (err) {
+          console.log(JSON.stringify(err));
+        } else {
+            //console.log("Updated Match: " + curMatch.gameId);
+        }
+      });
+    }
   });
 }
 

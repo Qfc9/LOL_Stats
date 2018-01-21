@@ -69,6 +69,11 @@ function fetchLOLMatches(users)
                 });
               });
 
+              // Updating timer on people with all match data already stored
+              var id = {};
+              id.player = user.userData;
+              setLOLUser(id);
+
               counter = counter + 1;
               console.log("\nFinished user " +counter+ "/" + users.length + "\n");
           }
@@ -199,7 +204,7 @@ function setLOLUser(id) {
         {
           addLOLUser(id, options);
         }
-        else if(data.Items.updateTime < (Date.now() - updateWaitTimer))
+        else if(data.Item.updateTime < (Date.now() - updateWaitTimer))
         {
           updateLOLUser(id, options);
         }
@@ -228,7 +233,7 @@ function updateLOLUser(id, options)
           ExpressionAttributeValues:{
               ":data":id.player,
               ":rank": rankedData,
-              ":time":Date.now()
+              ":time": Date.now()
           },
               ReturnValues:"UPDATED_NEW"
           };
@@ -264,7 +269,7 @@ function addLOLUser(id, options)
                   "username": id.player.summonerName.toLowerCase(),
                   "rank":rankedData,
                   "userData":id.player,
-                  "updateTime": 1000
+                  "updateTime": Date.now()
               }
           };
           docClient.put(params, function(err, data) {
