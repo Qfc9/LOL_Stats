@@ -1,8 +1,0 @@
-{
-  "name": "LOLStats",
-  "description": "",
-  "memory": 128,
-  "timeout": 200,
-  "role": "arn:aws:iam::820451578584:role/1v1_lambda_function",
-  "environment": {}
-}
