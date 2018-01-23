@@ -153,7 +153,7 @@ function logMatch(match) {
         console.log("Unable to add item. Error JSON:" + JSON.stringify(err));
     } else {
         setMetadata(match.gameId);
-        console.log("Added item:", JSON.stringify(data, null, 2));
+        //console.log("Added item:", JSON.stringify(data, null, 2));
       }
   });
 }
@@ -174,7 +174,9 @@ function fetchLOLMatch(match)
           if(parsedBody.queueId < 800 || parsedBody.queueId > 899)
           {
               logMatch(parsedBody);
+              console.log("LOG ME");
           }
+          console.log("ASDF");
 
           parsedBody.participantIdentities.forEach(function(id){
             sleep(1000);
@@ -358,7 +360,7 @@ function setMetadata(gameId) {
       ReturnValues:"UPDATED_NEW"
   };
 
-  docClient.update(setMetadata, function (err, data) {
+  docClient.update(updateAllMeta, function (err, data) {
     // Adding if can't update
     if (err) {
       console.log(JSON.stringify(err));
