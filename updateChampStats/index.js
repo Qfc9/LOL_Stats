@@ -7,6 +7,7 @@ AWS.config.update({
 var docClient = new AWS.DynamoDB.DocumentClient();
 var matchDataBase = "LOLStats_NAMatches";
 var champDataBase = 'LOLStats_NAChampionStats';
+var metaDataBase = "LOLStats_NAMetadata";
 var userDataBase = "LOLStats_User";
 var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"

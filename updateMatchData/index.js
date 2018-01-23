@@ -9,11 +9,44 @@ var championStats;
 var userDataBase = "LOLStats_User";
 var matchDataBase = "LOLStats_NAMatches";
 var champDataBase = 'LOLStats_NAChampionStats';
+var metaDataBase = "LOLStats_NAMetadata";
 var apiTokenLOL = {
     "X-Riot-Token": "RGAPI-0db09ba6-a288-4d0c-86f0-0b48c2c7f035"
   };
 
+var allMetadata;
+var champMetadata;
 var updateWaitTimer = 172800000;
+
+var metaAllParams = {
+    TableName: metaDataBase,
+    Key:{
+        meta: "allMatches"
+    }
+};
+
+var metaChampParams = {
+    TableName: metaDataBase,
+    Key:{
+        meta: "champWinRates"
+    }
+};
+
+docClient.get(metaAllParams, function(err, data) {
+    if (err) {
+        console.error("Unable to read item. Error JSON:", JSON.stringify(err, null, 2));
+    } else {
+        allMetadata = data.Item.matchIds;
+        docClient.get(metaChampParams, function(err, data) {
+            if (err) {
+                console.error("Unable to read item. Error JSON:", JSON.stringify(err, null, 2));
+            } else {
+                champMetadata = data.Item.matchIds;
+                startSearching();
+            }
+        });
+    }
+});
 
 var initParams = {
   TableName: userDataBase,
@@ -24,16 +57,19 @@ var initParams = {
   }
 };
 
-docClient.scan(initParams, function onScan(err, data) {
-      if (err) {
-          console.error("Unable to scan the table. Error JSON: " + JSON.stringify(err, null, 2));
-      } else {
-          console.log("Scan succeeded.");
+function startSearching()
+{
+    docClient.scan(initParams, function onScan(err, data) {
+        if (err) {
+            console.error("Unable to scan the table. Error JSON: " + JSON.stringify(err, null, 2));
+        } else {
+            console.log("Scan succeeded.");
 
-          fetchLOLMatches(data.Items);
-          console.log("FINISHED!!!!!!!!!!!");
-      }
-  });
+            fetchLOLMatches(data.Items);
+            console.log("FINISHED!!!!!!!!!!!");
+        }
+    });
+}
 
 function fetchLOLMatches(users)
 {
@@ -116,7 +152,8 @@ function logMatch(match) {
     if (err) {
         console.log("Unable to add item. Error JSON:" + JSON.stringify(err));
     } else {
-        //console.log("Added item:", JSON.stringify(data, null, 2));
+        setMetadata(match.gameId);
+        console.log("Added item:", JSON.stringify(data, null, 2));
       }
   });
 }
@@ -283,5 +320,59 @@ function addLOLUser(id, options)
       else{
         //callback(error);
       }
+  });
+}
+
+function setMetadata(gameId) {
+
+  champMetadata.push(gameId);
+  allMetadata.push(gameId);
+
+  var updateAllMeta = {
+  TableName: metaDataBase,
+  Key:{
+      "meta": "allMatches"
+  },
+  UpdateExpression: "set #matchIds = :matches",
+  ExpressionAttributeNames: {
+    "#matchIds": "matchIds"
+  },
+  ExpressionAttributeValues:{
+      ":matches": allMetadata
+  },
+      ReturnValues:"UPDATED_NEW"
+  };
+
+  var updateChampMeta = {
+  TableName: metaDataBase,
+  Key:{
+      "meta": "champWinRates"
+  },
+  UpdateExpression: "set #matchIds = :matches",
+  ExpressionAttributeNames: {
+    "#matchIds": "matchIds"
+  },
+  ExpressionAttributeValues:{
+      ":matches": champMetadata
+  },
+      ReturnValues:"UPDATED_NEW"
+  };
+
+  docClient.update(setMetadata, function (err, data) {
+    // Adding if can't update
+    if (err) {
+      console.log(JSON.stringify(err));
+    } else {
+        console.log("Updated allMatches");
+    }
+  });
+
+  docClient.update(updateChampMeta, function (err, data) {
+    // Adding if can't update
+    if (err) {
+      console.log(JSON.stringify(err));
+    } else {
+        console.log("Updated Champ Win Rates");
+    }
   });
 }
