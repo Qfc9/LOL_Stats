@@ -174,9 +174,7 @@ function fetchLOLMatch(match)
           if(parsedBody.queueId < 800 || parsedBody.queueId > 899)
           {
               logMatch(parsedBody);
-              console.log("LOG ME");
           }
-          console.log("ASDF");
 
           parsedBody.participantIdentities.forEach(function(id){
             sleep(1000);
@@ -365,7 +363,7 @@ function setMetadata(gameId) {
     if (err) {
       console.log(JSON.stringify(err));
     } else {
-        console.log("Updated allMatches");
+        //console.log("Updated allMatches");
     }
   });
 
@@ -374,7 +372,7 @@ function setMetadata(gameId) {
     if (err) {
       console.log(JSON.stringify(err));
     } else {
-        console.log("Updated Champ Win Rates");
+        //console.log("Updated Champ Win Rates");
     }
   });
 }
