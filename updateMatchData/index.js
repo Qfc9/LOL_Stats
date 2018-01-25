@@ -16,7 +16,9 @@ var apiTokenLOL = {
 
 var allMetadata;
 var champMetadata;
-var updateWaitTimer = 172800000;
+var allUsers = [];
+// Five Days
+var updateWaitTimer = 432000000;
 
 var metaAllParams = {
     TableName: metaDataBase,
@@ -63,10 +65,19 @@ function startSearching()
         if (err) {
             console.error("Unable to scan the table. Error JSON: " + JSON.stringify(err, null, 2));
         } else {
-            console.log("Scan succeeded.");
-
-            fetchLOLMatches(data.Items);
-            console.log("FINISHED!!!!!!!!!!!");
+            allUsers = allUsers.concat(data.Items);
+            if(data.LastEvaluatedKey)
+            {
+              initParams.ExclusiveStartKey = data.LastEvaluatedKey;
+              sleep(55);
+              startSearching();
+            }
+            else
+            {
+              console.log("Scan succeeded.");
+              fetchLOLMatches(allUsers);
+              console.log("FINISHED!!!!!!!!!!!");
+            }
         }
     });
 }
@@ -98,11 +109,14 @@ function fetchLOLMatches(users)
               var matchCounter = 1;
               parsedBody.matches.forEach(function(match){
                 console.log("Processing match " + matchCounter + "/" + parsedBody.matches.length);
-                matchCounter = matchCounter + 1;
-                sleep(1500);
-                matchExists(match.gameId, function(){
-                  fetchLOLMatch(match);
-                });
+                if(match.season > 9)
+                {
+                  matchCounter = matchCounter + 1;
+                  sleep(1500);
+                  matchExists(match.gameId, function(){
+                    fetchLOLMatch(match);
+                  });
+                }
               });
 
               // Updating timer on people with all match data already stored
