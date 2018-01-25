@@ -14,14 +14,19 @@ var apiTokenLOL = {
   };
 
 var pkMatches = [];
-var newData = [];
+var newChamps = [];
+var allDone = false;
 
-var paramsMatches = {
-  TableName: matchDataBase,
-  FilterExpression: "attribute_not_exists(#analyzed)",
-  ExpressionAttributeNames: {
-    "#analyzed": "analyzed"
-  }
+var metadataParams = {
+    TableName: metaDataBase,
+    Key:{
+        meta: "champWinRates"
+    }
+};
+
+var matchParams = {
+    TableName: matchDataBase,
+    Key: {}
 };
 
 // var paramsMatches = {
@@ -32,34 +37,12 @@ var paramsMatches = {
 //   }
 // };
 
-var params = {
+var champStatsParams = {
   TableName: champDataBase
 };
 
-// Getting New Data
-var scanExecute = function()
-{
-  docClient.scan(paramsMatches, function onScan(err, data) {
-    if (err) {
-        console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
-    } else {
-        newData = newData.concat(data.Items);
-        if(data.LastEvaluatedKey)
-        {
-          paramsMatches.ExclusiveStartKey = data.LastEvaluatedKey;
-          sleep(50);
-          scanExecute();
-        }
-        else
-        {
-          storeChampionStats(newData);
-        }
-    }
-  });
-}
-
 // Getting Current Data
-docClient.scan(params, function onScan(err, data) {
+docClient.scan(champStatsParams, function onScan(err, data) {
   if (err) {
       console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
       callback(err);
@@ -70,45 +53,120 @@ docClient.scan(params, function onScan(err, data) {
   }
 });
 
-function storeChampionStats(matches) {
-
-  console.log("Processing " + matches.length + " matches");
-  var theKey = "overall";
-
-  matches.forEach(function(curMatch){
-    var found = false;
-    var theKey = "overall";
-
-    if((curMatch.queueId >= 400 && curMatch.queueId <= 500) && curMatch.queueId != 450)
-    {
-      theKey = currentMatchRank(curMatch);
-    }
-
-    // Fixing patch number
-    var firstDot = curMatch.gameVersion.indexOf(".") + 1;
-    var secondDot = curMatch.gameVersion.indexOf(".", firstDot);
-    curMatch.gameVersion = curMatch.gameVersion.substring(0, secondDot);
-
-    pkMatches.forEach(function(pkMatch){
-      if (curMatch.gameVersion == pkMatch.patch && curMatch.queueId == pkMatch.queueId)
-      {
-        updateMatch(pkMatch, curMatch, theKey);
-        if(theKey != "overall")
-        {
-          updateMatch(pkMatch, curMatch, "overall");
-        }
-        found = true;
-      }
-    });
-    // IF NOT FOUND
-    if(!found)
-    {
-      addMatch(pkMatches, curMatch, theKey);
+// Getting New Data
+var scanExecute = function()
+{
+  docClient.get(metadataParams, function onScan(err, data) {
+    if (err) {
+        console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
+    } else {
+        storeChampionStats(data.Item.matchIds);
+        console.log("Done");
     }
   });
+}
 
-  addChampionStats(pkMatches, matches);
+function storeChampionStats(newMatchIds) {
 
+  console.log("Processing " + newMatchIds.length + " matches");
+  var theKey = "overall";
+  var allGames = 0;
+
+  pkMatches.forEach(function(match){
+    allGames += match.overall.duration.totalGames
+  });
+
+  console.log("Starting with " + allGames);
+  console.log("Should End with " + (allGames + newMatchIds.length));
+  allGames = 0;
+
+  while(true) {
+    //sleep(25);
+    newMatchIds.splice(getMatch(newMatchIds[0], false), 1);
+    newMatchIds.splice(0, 1);
+
+    if(newMatchIds.length == 1)
+    {
+      break;
+    }
+  }
+
+  newMatchIds.splice(getMatch(newMatchIds[0], true), 1);
+  newMatchIds.splice(0, 1);
+
+  while(!allDone)
+  {
+    sleep(10000);
+  }
+
+  sleep(5000);
+
+  pkMatches.forEach(function(match){
+    allGames += match.overall.duration.totalGames
+  });
+
+  console.log("Ending with " + allGames);
+
+  //console.log(pkMatches);
+  addChampionStats(pkMatches);
+
+}
+
+function processMatch(curMatch)
+{
+  var found = false;
+  var theKey = "overall";
+
+  if(curMatch.queueId >= 500)
+  {
+    return "invalid queue id";
+  }
+
+  // Bot game filter
+  if((curMatch.queueId >= 400 && curMatch.queueId <= 500) && curMatch.queueId != 450)
+  {
+    theKey = currentMatchRank(curMatch);
+  }
+
+  // Fixing patch number
+  var firstDot = curMatch.gameVersion.indexOf(".") + 1;
+  var secondDot = curMatch.gameVersion.indexOf(".", firstDot);
+  curMatch.gameVersion = curMatch.gameVersion.substring(0, secondDot);
+
+  pkMatches.forEach(function(pkMatch){
+    if (curMatch.gameVersion == pkMatch.patch && curMatch.queueId == pkMatch.queueId)
+    {
+      updateMatch(pkMatch, curMatch, theKey);
+      if(theKey != "overall")
+      {
+        updateMatch(pkMatch, curMatch, "overall");
+      }
+      found = true;
+    }
+  });
+  // IF NOT FOUND
+  if(!found)
+  {
+    addMatch(pkMatches, curMatch, theKey);
+  }
+}
+
+function getMatch(matchId, setDone)
+{
+  matchParams.Key.gameId = matchId;
+  docClient.get(matchParams, function onScan(err, data) {
+    if (err) {
+        console.error("Unable to scan the table. Error JSON:", JSON.stringify(err, null, 2));
+    } else {
+      //console.log(data.Item);
+      processMatch(data.Item);
+      if(setDone)
+      {
+        allDone = true;
+      }
+        //storeChampionStats(data.Item.matchIds);
+    }
+  });
 }
 
 function addMatch(pkMatches, curMatch, theKey)
@@ -262,7 +320,7 @@ function updateMatch(pkMatch, curMatch, theKey)
   });
 }
 
-function addChampionStats(packagedMatches, matches)
+function addChampionStats(packagedMatches)
 {
   var counter = 0;
   packagedMatches.forEach(function(match){
@@ -314,50 +372,15 @@ function addChampionStats(packagedMatches, matches)
           //     else
           //     {
           //         //console.log("Added item:", JSON.stringify(data, null, 2));
-          //         updateMatchChampStatsLog(matches);
           //     }
           // });
       } else {
           console.log("Setting " + counter + "/" + packagedMatches.length);
-          updateMatchChampStatsLog(matches);
       }
     });
     counter += 1;
   });
 
-}
-
-function updateMatchChampStatsLog(matches)
-{
-  matches.forEach(function(curMatch){
-    sleep(250);
-    if(curMatch.gameId)
-    {
-      var params = {
-      TableName: matchDataBase,
-      Key:{
-          "gameId": curMatch.gameId
-      },
-      UpdateExpression: "set #analyzed = :matchStats",
-      ExpressionAttributeNames: {
-        "#analyzed": "analyzed"
-      },
-      ExpressionAttributeValues:{
-          ":matchStats": {champStats: true}
-      },
-          ReturnValues:"UPDATED_NEW"
-      };
-
-      docClient.update(params, function (err, data) {
-        // Adding if can't update
-        if (err) {
-          console.log(JSON.stringify(err));
-        } else {
-            //console.log("Updated Match: " + curMatch.gameId);
-        }
-      });
-    }
-  });
 }
 
 function currentMatchRank(curMatch)
