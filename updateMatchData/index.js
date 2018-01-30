@@ -18,7 +18,7 @@ var allMetadata;
 var champMetadata;
 var allUsers = [];
 // Five Days
-var updateWaitTimer = 432000000;
+var updateWaitTimer = 1032000000;
 
 var metaAllParams = {
     TableName: metaDataBase,
@@ -59,6 +59,7 @@ var initParams = {
   }
 };
 
+var theCounter = 0;
 function startSearching()
 {
     docClient.scan(initParams, function onScan(err, data) {
@@ -66,10 +67,11 @@ function startSearching()
             console.error("Unable to scan the table. Error JSON: " + JSON.stringify(err, null, 2));
         } else {
             allUsers = allUsers.concat(data.Items);
-            if(data.LastEvaluatedKey)
+            if(data.LastEvaluatedKey && theCounter < 50)
             {
               initParams.ExclusiveStartKey = data.LastEvaluatedKey;
               sleep(55);
+              theCounter += 1;
               startSearching();
             }
             else
