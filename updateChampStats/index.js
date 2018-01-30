@@ -81,7 +81,7 @@ function storeChampionStats(newMatchIds) {
   allGames = 0;
 
   while(true) {
-    //sleep(25);
+    sleep(25);
     newMatchIds.splice(getMatch(newMatchIds[0], false), 1);
     newMatchIds.splice(0, 1);
 
@@ -326,7 +326,7 @@ function addChampionStats(packagedMatches)
   packagedMatches.forEach(function(match){
 
     console.log(match.overall.duration.totalGames);
-    sleep(250);
+    sleep(1000);
 
     var params = {
     TableName: champDataBase,

@@ -109,7 +109,7 @@ function fetchLOLMatches(users)
               var matchCounter = 1;
               parsedBody.matches.forEach(function(match){
                 console.log("Processing match " + matchCounter + "/" + parsedBody.matches.length);
-                if(match.season > 9)
+                if(match.season > 10)
                 {
                   matchCounter = matchCounter + 1;
                   sleep(1500);
